@@ -5,10 +5,12 @@
 package openid
 
 import (
+	"log"
 	"os"
 	"http"
 	"regexp"
 	"bytes"
+	"url"
 )
 
 // Verify that the url given match a successfull authentication
@@ -16,13 +18,13 @@ import (
 // * true if authenticated, false otherwise
 // * The Claimed identifier if authenticated
 // * Eventually an error
-func Verify(url string) (grant bool, identifier string, err os.Error) {
+func Verify(url_ string) (grant bool, identifier string, err os.Error) {
 	grant = false
 	identifier = ""
 	err = nil
 
-	var urlm map[string]string
-	urlm, err = url2map(url)
+	var values url.Values
+	values, err = url.ParseQuery(url_)
 	if err != nil {
 		return false, "", err
 	}
@@ -36,38 +38,38 @@ func Verify(url string) (grant bool, identifier string, err os.Error) {
 
 	// The signature on the assertion is valid and all fields that are required to be signed are signed (Section 11.4)
 
-	grant, err = verifyDirect(urlm)
-	if err != nil {
-		return
-	}
-
-	identifier = urlm["openid.claimed_id"]
-
-	return
+	return VerifyValues(values)
 }
 
 var REVerifyDirectIsValid = "is_valid:true"
 var REVerifyDirectNs = regexp.MustCompile("ns:([a-zA-Z0-9:/.]*)")
 
-func verifyDirect(urlm map[string]string) (grant bool, err os.Error) {
-	grant = false
+// Like Verify on a parsed URL
+func VerifyValues(values url.Values) (grant bool, identifier string, err os.Error) {
 	err = nil
 
-	urlm["openid.mode"] = "check_authentication"
+	var postArgs url.Values
+	postArgs = url.Values(map[string][]string{})
 
 	// Create the url
-	URLEndPoint := urlm["openid.op_endpoint"]
-	var postContent string
-	for k, v := range urlm {
-		postContent += http.URLEscape(k) + "=" + http.URLEscape(v) + "&"
+	URLEndPoint := values.Get("openid.op_endpoint")
+	if URLEndPoint == "" {
+		log.Printf("no openid.op_endpoint")
+		return false, "", os.NewError("no openid.op_endpoint")
 	}
+	for k, v := range values {
+		postArgs[k] = v
+	}
+	postArgs.Set("openid.mode", "check_authentication")
+	postContent := postArgs.Encode()
 
 	// Post the request
 	var client = new(http.Client)
 	postReader := bytes.NewBuffer([]byte(postContent))
 	response, err := client.Post(URLEndPoint, "application/x-www-form-urlencoded", postReader)
 	if err != nil {
-		return false, err
+		log.Printf("VerifyValues failed at post")
+		return false, "", err
 	}
 
 	// Parse the response
@@ -76,65 +78,30 @@ func verifyDirect(urlm map[string]string) (grant bool, err os.Error) {
 	buffer := make([]byte, 1024)
 	_, err = response.Body.Read(buffer)
 	if err != nil {
-		return false, err
+		log.Printf("VerifyValues failed reading response")
+		return false, "", err
 	}
 
 	// Check for ns
 	rematch := REVerifyDirectNs.FindSubmatch(buffer)
 	if rematch == nil {
-		return false, os.ErrorString("verifyDirect: ns value not found on the response of the OP")
+		return false, "", os.NewError("VerifyValues: ns value not found on the response of the OP")
 	}
 	nsValue := string(rematch[1])
 	if !bytes.Equal([]byte(nsValue), []byte("http://specs.openid.net/auth/2.0")) {
-		return false, os.ErrorString("verifyDirect: ns value not correct: " + nsValue)
+		return false, "", os.NewError("VerifyValues: ns value not correct: " + nsValue)
 	}
 
 	// Check for is_valid
 	match, err := regexp.Match(REVerifyDirectIsValid, buffer)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	return match, nil
-}
-
-// Transform an url string into a map of parameters/value
-func url2map(url string) (map[string]string, os.Error) {
-	pmap := make(map[string]string)
-	var start, end, eq, length int
-	var param, value string
-	var err os.Error
-
-	length = len(url)
-	start = 0
-	for start < length && url[start] != '?' {
-		start++
+	identifier = values.Get("openid.claimed_id")
+	if !match {
+		log.Printf("no is_valid:true in \"%s\"", buffer)
 	}
-	if start >= length {
-		start = -1
-	}
-	end = start
-	for end < length {
-		start = end + 1
-		eq = start
-		for eq < length && url[eq] != '=' {
-			eq++
-		}
-		end = eq + 1
-		for end < length && url[end] != '&' {
-			end++
-		}
 
-		param, err = http.URLUnescape(url[start:eq])
-		if err != nil {
-			return nil, err
-		}
-		value, err = http.URLUnescape(url[eq+1 : end])
-		if err != nil {
-			return nil, err
-		}
-
-		pmap[param] = value
-	}
-	return pmap, nil
+	return match, identifier, nil
 }

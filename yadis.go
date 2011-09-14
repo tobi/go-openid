@@ -7,15 +7,20 @@ package openid
 import (
 	"os"
 	"http"
-	"xml"
-	"fmt"
+	"url"
 	"io"
+	"io/ioutil"
 	"bytes"
+	"log"
+	"regexp"
 	"strings"
 )
 
-
 func Yadis(ID string) (io.Reader, os.Error) {
+	return YadisVerbose(ID, nil)
+}
+
+func YadisVerbose(ID string, verbose *log.Logger) (io.Reader, os.Error) {
 	r, err := YadisRequest(ID, "GET")
 	if err != nil || r == nil {
 		return nil, err
@@ -25,29 +30,41 @@ func Yadis(ID string) (io.Reader, os.Error) {
 
 	// If it is an XRDS document, return the Reader
 	if strings.HasPrefix(contentType, "application/xrds+xml") {
+		if verbose != nil {
+			verbose.Printf("got xrds from \"%s\"", ID)
+		}
 		return r.Body, nil
 	}
 
 	// If it is an HTML doc search for meta tags
 	if bytes.Equal([]byte(contentType), []byte("text/html")) {
-		url, err := searchHTMLMetaXRDS(r.Body)
+		url_, err := searchHTMLMetaXRDS(r.Body)
 		if err != nil {
 			return nil, err
 		}
-		return Yadis(url)
+		if verbose != nil {
+			verbose.Printf("fetching xrds found in html \"%s\"", url_)
+		}
+		return Yadis(url_)
 	}
 
 	// If the response contain an X-XRDS-Location header
 	var xrds_location = r.Header.Get("X-Xrds-Location")
 	if len(xrds_location) > 0 {
+		if verbose != nil {
+			verbose.Printf("fetching xrds found in http header \"%s\"", xrds_location)
+		}
 		return Yadis(xrds_location)
 	}
 
+	if verbose != nil {
+		verbose.Printf("Yadis fails out, nothing found. status=%#v", r.StatusCode)
+	}
 	// If nothing is found try to parse it as a XRDS doc
 	return nil, nil
 }
 
-func YadisRequest(url string, method string) (resp *http.Response, err os.Error) {
+func YadisRequest(url_ string, method string) (resp *http.Response, err os.Error) {
 	resp = nil
 
 	var request = new(http.Request)
@@ -55,9 +72,9 @@ func YadisRequest(url string, method string) (resp *http.Response, err os.Error)
 	var Header = make(http.Header)
 
 	request.Method = method
-	request.RawURL = url
+	request.RawURL = url_
 
-	request.URL, err = http.ParseURL(url)
+	request.URL, err = url.Parse(url_)
 	if err != nil {
 		return
 	}
@@ -76,10 +93,13 @@ func YadisRequest(url string, method string) (resp *http.Response, err os.Error)
 	for i := 0; i < 5; i++ {
 		response, err := client.Do(request)
 
+		if err != nil {
+			return nil, err
+		}
 		if response.StatusCode == 301 || response.StatusCode == 302 || response.StatusCode == 303 || response.StatusCode == 307 {
 			location := response.Header.Get("Location")
 			request.RawURL = location
-			request.URL, err = http.ParseURL(location)
+			request.URL, err = url.Parse(location)
 			if err != nil {
 				return
 			}
@@ -87,45 +107,34 @@ func YadisRequest(url string, method string) (resp *http.Response, err os.Error)
 			return response, nil
 		}
 	}
-	return nil, os.ErrorString("Too many redirections")
+	return nil, os.NewError("Too many redirections")
+}
+
+var metaRE *regexp.Regexp
+var xrdsRE *regexp.Regexp
+
+func init() {
+	// These are ridiculous case insensitive pattern constructions.
+
+	// <[ \t]*meta[^>]*http-equiv=["']x-xrds-location["'][^>]*>
+	metaRE = regexp.MustCompile("<[ \t]*[mM][eE][tT][aA][^>]*[hH][tT][tT][pP]-[eE][qQ][uU][iI][vV]=[\"'][xX]-[xX][rR][dD][sS]-[lL][oO][cC][aA][tT][iI][oO][nN][\"'][^>]*>")
+
+	// content=["']([^"']+)["']
+	xrdsRE = regexp.MustCompile("[cC][oO][nN][tT][eE][nN][tT]=[\"']([^\"]+)[\"']")
 }
 
 func searchHTMLMetaXRDS(r io.Reader) (string, os.Error) {
-	parser := xml.NewParser(r)
-	var token xml.Token
-	var err os.Error
-	for {
-		token, err = parser.Token()
-		if token == nil || err != nil {
-			if err == os.EOF {
-				break
-			}
-			return "", err
-		}
-
-		switch token.(type) {
-		case xml.StartElement:
-			if token.(xml.StartElement).Name.Local == "meta" {
-				// Found a meta token. Verify that it is a X-XRDS-Location and return the content
-				var content string
-				var contentE bool
-				var httpEquivOK bool
-				contentE = false
-				httpEquivOK = false
-				for _, v := range token.(xml.StartElement).Attr {
-					if v.Name.Local == "http-equiv" && v.Value == "X-XRDS-Location" {
-						httpEquivOK = true
-					}
-					if v.Name.Local == "content" {
-						content = v.Value
-						contentE = true
-					}
-				}
-				if contentE && httpEquivOK {
-					return fmt.Sprint(content), nil
-				}
-			}
-		}
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return "", err
 	}
-	return "", os.ErrorString("Value not found")
+	part := metaRE.Find(data)
+	if part == nil {
+		return "", os.NewError("No -meta- match")
+	}
+	content := xrdsRE.FindSubmatch(part)
+	if content == nil {
+		return "", os.NewError("No content in meta tag: " + string(part))
+	}
+	return string(content[1]), nil
 }
