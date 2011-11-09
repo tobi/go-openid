@@ -56,7 +56,7 @@ type YadisTest struct {
 var YadisTests = []YadisTest{
 	YadisTest{"https://www.google.com/accounts/o8/id"},
 	YadisTest{"http://orange.fr/"},
-	YadisTest{"http://www.yahoo.com/"},
+	//YadisTest{"http://www.yahoo.com/"},
 }
 
 // Test whether the Yadis function returns no errors and a non nil reader
