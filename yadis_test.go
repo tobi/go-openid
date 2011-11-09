@@ -39,7 +39,7 @@ func TestSearchHTMLMetaXRDS(t *testing.T) {
 	for _, l := range searchHTMLMetaXRDSTests {
 		content, err := searchHTMLMetaXRDS(bytes.NewBuffer(l.in))
 		if err != nil {
-			t.Errorf("searchHTMLMetaXRDS error: %s", err.String())
+			t.Errorf("searchHTMLMetaXRDS error: %s", err.Error())
 		}
 		if !bytes.Equal([]byte(content), []byte(l.out)) {
 			t.Errorf("searchHTMLMetaXRDS(%s) = %s want %s.", l.in, content, l.out)
@@ -66,7 +66,7 @@ func TestYadis(t *testing.T) {
 	for _, yt := range YadisTests {
 		var reader, err = YadisVerbose(yt.url, logger)
 		if err != nil {
-			t.Errorf("Yadis(%s) returned a error: %s", yt.url, err.String())
+			t.Errorf("Yadis(%s) returned a error: %s", yt.url, err.Error())
 			continue
 		}
 		if reader == nil {
