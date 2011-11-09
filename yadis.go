@@ -5,7 +5,7 @@
 package openid
 
 import (
-	"os"
+	"errors"
 	"http"
 	"url"
 	"io"
@@ -16,11 +16,11 @@ import (
 	"strings"
 )
 
-func Yadis(ID string) (io.Reader, os.Error) {
+func Yadis(ID string) (io.Reader, error) {
 	return YadisVerbose(ID, nil)
 }
 
-func YadisVerbose(ID string, verbose *log.Logger) (io.Reader, os.Error) {
+func YadisVerbose(ID string, verbose *log.Logger) (io.Reader, error) {
 	r, err := YadisRequest(ID, "GET")
 	if err != nil || r == nil {
 		return nil, err
@@ -64,7 +64,7 @@ func YadisVerbose(ID string, verbose *log.Logger) (io.Reader, os.Error) {
 	return nil, nil
 }
 
-func YadisRequest(url_ string, method string) (resp *http.Response, err os.Error) {
+func YadisRequest(url_ string, method string) (resp *http.Response, err error) {
 	resp = nil
 
 	var request = new(http.Request)
@@ -72,7 +72,6 @@ func YadisRequest(url_ string, method string) (resp *http.Response, err os.Error
 	var Header = make(http.Header)
 
 	request.Method = method
-	request.RawURL = url_
 
 	request.URL, err = url.Parse(url_)
 	if err != nil {
@@ -98,16 +97,15 @@ func YadisRequest(url_ string, method string) (resp *http.Response, err os.Error
 		}
 		if response.StatusCode == 301 || response.StatusCode == 302 || response.StatusCode == 303 || response.StatusCode == 307 {
 			location := response.Header.Get("Location")
-			request.RawURL = location
 			request.URL, err = url.Parse(location)
 			if err != nil {
-				return
+				return nil, err
 			}
 		} else {
 			return response, nil
 		}
 	}
-	return nil, os.NewError("Too many redirections")
+	return nil, errors.New("Too many redirections")
 }
 
 var metaRE *regexp.Regexp
@@ -123,18 +121,18 @@ func init() {
 	xrdsRE = regexp.MustCompile("[cC][oO][nN][tT][eE][nN][tT]=[\"']([^\"]+)[\"']")
 }
 
-func searchHTMLMetaXRDS(r io.Reader) (string, os.Error) {
+func searchHTMLMetaXRDS(r io.Reader) (string, error) {
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		return "", err
 	}
 	part := metaRE.Find(data)
 	if part == nil {
-		return "", os.NewError("No -meta- match")
+		return "", errors.New("No -meta- match")
 	}
 	content := xrdsRE.FindSubmatch(part)
 	if content == nil {
-		return "", os.NewError("No content in meta tag: " + string(part))
+		return "", errors.New("No content in meta tag: " + string(part))
 	}
 	return string(content[1]), nil
 }

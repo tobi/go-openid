@@ -5,9 +5,9 @@
 package openid
 
 import (
+	"errors"
 	"strings"
 	"io"
-	"os"
 	"url"
 )
 
@@ -17,14 +17,14 @@ const (
 	IdentifierURL
 )
 
-func GetRedirectURL(Identifier string, realm string, returnto string) (string, os.Error) {
-	var err os.Error
+func GetRedirectURL(Identifier string, realm string, returnto string) (string, error) {
+	var err error
 	var Id, IdType = NormalizeIdentifier(Identifier)
 
 	// If the identifier is an XRI, [XRI_Resolution_2.0] will yield an XRDS document that contains the necessary information. It should also be noted that Relying Parties can take advantage of XRI Proxy Resolvers, such as the one provided by XDI.org at http://www.xri.net. This will remove the need for the RPs to perform XRI Resolution locally.
 	if IdType == IdentifierXRI {
 		// Not implemented yet
-		return "", os.NewError("XRI identifier not implemented yed")
+		return "", errors.New("XRI identifier not implemented yed")
 	}
 
 	// If it is a URL, the Yadis protocol [Yadis] SHALL be first attempted. If it succeeds, the result is again an XRDS document.
@@ -35,12 +35,12 @@ func GetRedirectURL(Identifier string, realm string, returnto string) (string, o
 			return "", err
 		}
 		if reader == nil {
-			return "", os.NewError("Yadis returned an empty Reader for the ID: " + Id)
+			return "", errors.New("Yadis returned an empty Reader for the ID: " + Id)
 		}
 
 		var endpoint, claimedid = ParseXRDS(reader)
 		if len(endpoint) == 0 {
-			return "", os.NewError("Unable to parse the XRDS document")
+			return "", errors.New("Unable to parse the XRDS document")
 		}
 
 		// At this point we have the endpoint and eventually a claimed id		 
