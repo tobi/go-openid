@@ -41,7 +41,7 @@ func TestNormalizeIdentifier(testing *testing.T) {
 var Identifiers = []string{
 	"https://www.google.com/accounts/o8/id",
 	"orange.fr",
-	"yahoo.com",
+	//"yahoo.com",
 }
 
 // Just check that there is no errors returned by GetRedirectURL
@@ -49,7 +49,7 @@ func TestGetRedirectURL(t *testing.T) {
 	for _, url := range Identifiers {
 		_, err := GetRedirectURL(url, "http://example.com", "/loginCheck")
 		if err != nil {
-			t.Errorf("GetRedirectURL() returned the error: %s", err.String())
+			t.Errorf("GetRedirectURL() returned the error: %s", err.Error())
 		}
 	}
 }
