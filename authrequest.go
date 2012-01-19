@@ -97,10 +97,19 @@ func CreateAuthenticationRequest(OPEndPoint, ClaimedID, Realm, ReturnTo string) 
 	p["openid.realm"] = Realm
 
 	var url_ string
-	url_ = OPEndPoint + "?"
+
+	if strings.Index(OPEndPoint, "?") == -1 {
+		url_ = OPEndPoint + "?"
+	} else {
+		url_ = OPEndPoint + "&"
+	}
+
+	var params []string
 
 	for k, v := range p {
-		url_ += url.QueryEscape(k) + "=" + url.QueryEscape(v) + "&"
+		params = append(params, url.QueryEscape(k) + "=" + url.QueryEscape(v))
+		
 	}
-	return url_
+
+	return url_ + strings.Join(params, "&")
 }
