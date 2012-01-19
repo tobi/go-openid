@@ -8,7 +8,7 @@ import (
 	"errors"
 	"strings"
 	"io"
-	"url"
+	"net/url"
 )
 
 const (
