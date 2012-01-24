@@ -6,8 +6,8 @@ package openid
 
 import (
 	"errors"
-	"http"
-	"url"
+	"net/http"
+	"net/url"
 	"io"
 	"io/ioutil"
 	"bytes"

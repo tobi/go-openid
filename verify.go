@@ -7,10 +7,10 @@ package openid
 import (
 	"errors"
 	"log"
-	"http"
+	"net/http"
 	"regexp"
 	"bytes"
-	"url"
+	"net/url"
 )
 
 // Verify that the url given match a successfull authentication

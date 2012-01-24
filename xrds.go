@@ -5,7 +5,7 @@
 package openid
 
 import (
-	"xml"
+	"encoding/xml"
 	"io"
 	"strings"
 )
